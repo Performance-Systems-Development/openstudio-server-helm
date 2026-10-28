@@ -131,6 +131,12 @@ web:
   # passenger_max_pool_size: "21"
   # This value is typically between 150 and 400, find this by ssh into web pod and doing `passenger-status`
   passenger_memory_per_process: 250
+  log_trim:
+    enabled: false
+    image: "alpine:3.20"
+    max_size_mb: 500
+    keep_size_mb: 50
+    interval_seconds: 600
   container:
     name: "web"
     image: "nrel/openstudio-server:3.8.0-1"
@@ -182,3 +188,10 @@ storage_class:
 
 priority_class:
   deploy: true
+
+datapoints_cleanup:
+  enabled: false
+  name: "datapoints-cleanup"
+  image: "alpine:3.20"
+  schedule: "0 6 * * *"
+  retention_days: 7

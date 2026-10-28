@@ -46,6 +46,10 @@ spec:
           volumeMounts:
             - name: nfs
               mountPath: "/mnt/openstudio"
+            {{- if .Values.web.log_trim.enabled }}
+            - name: server-log
+              mountPath: "/opt/openstudio/server/log"
+            {{- end }}
           env:
             - name: OS_SERVER_NUMBER_OF_WORKERS
               value: {{ .Values.rserve.number_of_workers | quote }}
@@ -79,8 +83,38 @@ spec:
             periodSeconds: 200
             timeoutSeconds: 120
             failureThreshold: 3
+        {{- if .Values.web.log_trim.enabled }}
+        # The server writes docker.log and resque.log in append mode and never rotates them, so truncating in place is safe.
+        - name: log-trim
+          image: {{ .Values.web.log_trim.image }}
+          command:
+            - /bin/sh
+            - -c
+            - |
+              while true; do
+                for f in /logs/*.log; do
+                  [ -f "$f" ] || continue
+                  if [ "$(stat -c %s "$f")" -gt $(({{ .Values.web.log_trim.max_size_mb }} * 1024 * 1024)) ]; then
+                    tail -c {{ .Values.web.log_trim.keep_size_mb }}M "$f" > "$f.1"
+                    : > "$f"
+                  fi
+                done
+                sleep {{ .Values.web.log_trim.interval_seconds }}
+              done
+          resources:
+            requests:
+              cpu: 10m
+              memory: 16Mi
+          volumeMounts:
+            - name: server-log
+              mountPath: /logs
+        {{- end }}
       priorityClassName: high-priority
       volumes:
         - name: nfs
           persistentVolumeClaim:
             claimName: nfs-pvc
+        {{- if .Values.web.log_trim.enabled }}
+        - name: server-log
+          emptyDir: {}
+        {{- end }}
