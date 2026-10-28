@@ -1,0 +1,45 @@
+{{- if .Values.datapoints_cleanup.enabled }}
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: {{ .Values.datapoints_cleanup.name }}
+spec:
+  schedule: {{ .Values.datapoints_cleanup.schedule | quote }}
+  concurrencyPolicy: Forbid
+  successfulJobsHistoryLimit: 1
+  failedJobsHistoryLimit: 3
+  jobTemplate:
+    spec:
+      template:
+        metadata:
+          labels:
+            app: {{ .Values.datapoints_cleanup.name }}
+            release: {{ .Release.Name }}
+        spec:
+          restartPolicy: Never
+          affinity:
+            nodeAffinity:
+              requiredDuringSchedulingIgnoredDuringExecution:
+                nodeSelectorTerms:
+                  - matchExpressions:
+                      - key: nodegroup
+                        operator: In
+                        values:
+                          - web-group
+          containers:
+            - name: {{ .Values.datapoints_cleanup.name }}
+              image: {{ .Values.datapoints_cleanup.image }}
+              # The server never deletes data point folders when an analysis is deleted, so they fill the NFS volume.
+              command: ["/bin/sh", "-c", "find /mnt/openstudio/server/assets/data_points -mindepth 1 -maxdepth 1 -mtime +{{ .Values.datapoints_cleanup.retention_days }} -exec rm -rf {} + ; df -h /mnt/openstudio"]
+              resources:
+                requests:
+                  cpu: 50m
+                  memory: 64Mi
+              volumeMounts:
+                - name: nfs
+                  mountPath: "/mnt/openstudio"
+          volumes:
+            - name: nfs
+              persistentVolumeClaim:
+                claimName: nfs-pvc
+{{- end }}
